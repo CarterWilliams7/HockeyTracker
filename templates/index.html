@@ -2,79 +2,196 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NHL Live Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Parlay Tracker</title>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #121212; color: #fff; padding: 15px; margin: 0; }
-        h2 { text-align: center; color: #f2f2f2; }
+        body { font-family: -apple-system, sans-serif; background: #0d1117; color: #fff; padding: 15px; margin: 0; }
+        * { box-sizing: border-box; }
+
+        /* INPUT SECTION */
+        .controls { background: #161b22; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #30363d; }
         
-        #game-container { max-width: 600px; margin: 0 auto; }
-        
-        .card { 
-            background: #1e1e1e; 
-            border-radius: 12px; 
-            padding: 15px; 
-            margin-bottom: 12px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: space-between; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        input, select, button { 
+            width: 100%; padding: 12px; margin-bottom: 10px; 
+            background: #0d1117; border: 1px solid #30363d; 
+            color: white; border-radius: 6px; font-size: 1rem;
         }
-        .team { text-align: center; width: 30%; }
-        .team img { height: 40px; width: 40px; display: block; margin: 0 auto 5px; }
-        .score { font-size: 1.5rem; font-weight: bold; }
-        .status { font-size: 0.85rem; color: #ffcc00; width: 30%; text-align: center; }
-        .loading { text-align: center; color: #777; margin-top: 20px; }
+        
+        button.add-btn { background: #238636; border: none; font-weight: bold; cursor: pointer; }
+        button.add-btn:active { opacity: 0.8; }
+
+        /* SEARCH RESULTS */
+        #search-results { 
+            max-height: 150px; overflow-y: auto; 
+            background: #21262d; border-radius: 6px; 
+            display: none; margin-bottom: 10px;
+        }
+        .search-item { padding: 10px; border-bottom: 1px solid #30363d; cursor: pointer; }
+        .search-item:hover { background: #30363d; }
+
+        /* BET SLIP */
+        .bet-card { 
+            background: #161b22; border: 1px solid #30363d;
+            border-radius: 8px; padding: 15px; margin-bottom: 10px; 
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .hit { background: rgba(35, 134, 54, 0.2); border-color: #238636; }
+        
+        .player-info { font-size: 1rem; font-weight: bold; }
+        .bet-detail { font-size: 0.8rem; color: #8b949e; }
+        .score-box { text-align: right; }
+        .big-stat { font-size: 1.5rem; font-weight: 800; }
+        .status-txt { font-size: 0.7rem; color: #e3b341; }
+        
+        .delete-btn { color: #f85149; font-size: 0.8rem; margin-top: 5px; cursor: pointer; text-decoration: underline; }
     </style>
 </head>
 <body>
 
-    <h2>🏒 NHL Live Scores</h2>
-    <div id="game-container">
-        <div class="loading">Loading scores...</div>
+    <h2 style="text-align:center; color:#58a6ff;">🏒 Parlay Builder</h2>
+
+    <div class="controls">
+        <input type="text" id="playerSearch" placeholder="Search Player (e.g. Matthews)...">
+        <div id="search-results"></div>
+
+        <div id="betOptions" style="display:none;">
+            <div id="selectedPlayerName" style="margin-bottom:10px; color:#58a6ff; font-weight:bold;"></div>
+            
+            <select id="statType">
+                <option value="shots">Shots on Goal</option>
+                <option value="points">Points</option>
+                <option value="goals">Goals</option>
+                <option value="assists">Assists</option>
+            </select>
+            
+            <input type="number" id="statTarget" placeholder="Target (e.g. 3.5 or 1)" step="0.5">
+            <button class="add-btn" onclick="addBet()">Add to Slip</button>
+        </div>
     </div>
 
+    <div id="slip-container"></div>
+
     <script>
-        // This function asks Python for the data
-        async function fetchScores() {
-            try {
-                const response = await fetch('/api/scores');
-                const games = await response.json();
-                
-                const container = document.getElementById('game-container');
-                container.innerHTML = ''; // Clear old data
+        let myBets = JSON.parse(localStorage.getItem('nhl_bets')) || [];
+        let selectedPlayer = null;
 
-                if (games.length === 0) {
-                    container.innerHTML = '<div class="loading">No active games right now.</div>';
-                    return;
-                }
+        // --- SEARCH LOGIC ---
+        const searchInput = document.getElementById('playerSearch');
+        const resultsBox = document.getElementById('search-results');
 
-                games.forEach(game => {
-                    const card = `
-                        <div class="card">
-                            <div class="team">
-                                <img src="${game.away_logo}">
-                                <div class="score">${game.away_score}</div>
-                            </div>
-                            <div class="status">${game.status}</div>
-                            <div class="team">
-                                <img src="${game.home_logo}">
-                                <div class="score">${game.home_score}</div>
-                            </div>
+        searchInput.addEventListener('input', async (e) => {
+            const query = e.target.value;
+            if (query.length < 3) { resultsBox.style.display = 'none'; return; }
+
+            const res = await fetch(`/api/search?q=${query}`);
+            const players = await res.json();
+            
+            resultsBox.innerHTML = '';
+            players.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'search-item';
+                div.innerText = `${p.name} (${p.team})`;
+                div.onclick = () => selectPlayer(p);
+                resultsBox.appendChild(div);
+            });
+            resultsBox.style.display = 'block';
+        });
+
+        function selectPlayer(player) {
+            selectedPlayer = player;
+            document.getElementById('selectedPlayerName').innerText = `Selected: ${player.name}`;
+            document.getElementById('betOptions').style.display = 'block';
+            resultsBox.style.display = 'none';
+            searchInput.value = '';
+        }
+
+        // --- ADD BET LOGIC ---
+        function addBet() {
+            if (!selectedPlayer) return;
+            const type = document.getElementById('statType').value;
+            const target = document.getElementById('statTarget').value;
+
+            if (!target) { alert("Enter a target number!"); return; }
+
+            const newBet = {
+                id: Date.now(), // Unique ID
+                player: selectedPlayer.name,
+                team: selectedPlayer.team,
+                stat: type,
+                target: target,
+                current: 0,
+                status: 'Waiting...'
+            };
+
+            myBets.push(newBet);
+            saveAndRender();
+            
+            // Reset UI
+            document.getElementById('betOptions').style.display = 'none';
+            selectedPlayer = null;
+            updateLiveStats(); // Fetch data immediately
+        }
+
+        function removeBet(id) {
+            myBets = myBets.filter(b => b.id !== id);
+            saveAndRender();
+        }
+
+        function saveAndRender() {
+            localStorage.setItem('nhl_bets', JSON.stringify(myBets));
+            const container = document.getElementById('slip-container');
+            container.innerHTML = '';
+
+            myBets.forEach(bet => {
+                const hitClass = bet.is_hit ? 'hit' : '';
+                const html = `
+                    <div class="bet-card ${hitClass}">
+                        <div>
+                            <div class="player-info">${bet.player}</div>
+                            <div class="bet-detail">${bet.stat.toUpperCase()} • Target: ${bet.target}</div>
+                            <div class="delete-btn" onclick="removeBet(${bet.id})">Remove</div>
                         </div>
-                    `;
-                    container.innerHTML += card;
+                        <div class="score-box">
+                            <div class="big-stat" id="score-${bet.id}">${bet.current}</div>
+                            <div class="status-txt" id="status-${bet.id}">${bet.status}</div>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += html;
+            });
+        }
+
+        // --- LIVE UPDATE LOGIC ---
+        async function updateLiveStats() {
+            if (myBets.length === 0) return;
+
+            try {
+                const res = await fetch('/api/track', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(myBets)
                 });
-            } catch (error) {
-                console.error('Error fetching scores:', error);
+                const updates = await res.json();
+
+                // Merge updates into local myBets array to save state
+                updates.forEach(u => {
+                    const idx = myBets.findIndex(b => b.id === u.id);
+                    if (idx !== -1) {
+                        myBets[idx].current = u.current;
+                        myBets[idx].status = u.status;
+                        myBets[idx].is_hit = u.is_hit;
+                    }
+                });
+                saveAndRender(); // Re-render with new colors/numbers
+            } catch (e) {
+                console.error("Update failed", e);
             }
         }
 
-        // Run immediately when page loads
-        fetchScores();
-
-        // Run again every 10 seconds (Live updates without refreshing!)
-        setInterval(fetchScores, 10000);
+        // Init
+        saveAndRender();
+        setInterval(updateLiveStats, 15000); // Poll every 15s
+        updateLiveStats(); // Run on load
     </script>
 </body>
 </html>
