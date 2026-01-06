@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NHL Live Tracker</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #121212; color: #fff; padding: 15px; margin: 0; }
+        h2 { text-align: center; color: #f2f2f2; }
+        
+        #game-container { max-width: 600px; margin: 0 auto; }
+        
+        .card { 
+            background: #1e1e1e; 
+            border-radius: 12px; 
+            padding: 15px; 
+            margin-bottom: 12px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .team { text-align: center; width: 30%; }
+        .team img { height: 40px; width: 40px; display: block; margin: 0 auto 5px; }
+        .score { font-size: 1.5rem; font-weight: bold; }
+        .status { font-size: 0.85rem; color: #ffcc00; width: 30%; text-align: center; }
+        .loading { text-align: center; color: #777; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <h2>🏒 NHL Live Scores</h2>
+    <div id="game-container">
+        <div class="loading">Loading scores...</div>
+    </div>
+
+    <script>
+        // This function asks Python for the data
+        async function fetchScores() {
+            try {
+                const response = await fetch('/api/scores');
+                const games = await response.json();
+                
+                const container = document.getElementById('game-container');
+                container.innerHTML = ''; // Clear old data
+
+                if (games.length === 0) {
+                    container.innerHTML = '<div class="loading">No active games right now.</div>';
+                    return;
+                }
+
+                games.forEach(game => {
+                    const card = `
+                        <div class="card">
+                            <div class="team">
+                                <img src="${game.away_logo}">
+                                <div class="score">${game.away_score}</div>
+                            </div>
+                            <div class="status">${game.status}</div>
+                            <div class="team">
+                                <img src="${game.home_logo}">
+                                <div class="score">${game.home_score}</div>
+                            </div>
+                        </div>
+                    `;
+                    container.innerHTML += card;
+                });
+            } catch (error) {
+                console.error('Error fetching scores:', error);
+            }
+        }
+
+        // Run immediately when page loads
+        fetchScores();
+
+        // Run again every 10 seconds (Live updates without refreshing!)
+        setInterval(fetchScores, 10000);
+    </script>
+</body>
+</html>
