@@ -15,31 +15,44 @@ def home():
 @app.route('/api/search')
 def search_player():
     query = request.args.get('q', '')
-    if len(query) < 3:
-        return jsonify([])
-    
+    if len(query) < 3: return jsonify([])
+
     try:
-        # Search ESPN's database
-        resp = requests.get(SEARCH_URL.format(query)).json()
-        results = []
+        # NEW URL: Specifically asks for "player" type objects in NHL
+        # This filters out articles, videos, and generic pages
+        url = f"https://site.web.api.espn.com/apis/common/v3/search?region=us&lang=en&limit=10&query={query}&mode=prefix&type=player&sport=hockey&league=nhl"
         
-        for item in resp.get('items', []):
-            # Only look for actual athletes
-            if 'entity' in item and 'displayName' in item['entity']:
-                player = item['entity']
-                # Try to find the team name
-                team = "Free Agent"
-                if 'competitors' in player and len(player['competitors']) > 0:
-                    team = player['competitors'][0]['team']['displayName']
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        
+        resp = requests.get(url, headers=headers)
+        data = resp.json()
+        
+        results = []
+        for item in data.get('items', []):
+            # parsing logic for this specific endpoint
+            entity = item.get('entity', {})
+            name = entity.get('displayName')
+            
+            if not name: 
+                continue # Skip invalid results
+            
+            # Find team
+            team = "Free Agent"
+            if 'competitors' in entity and len(entity['competitors']) > 0:
+                team = entity['competitors'][0]['team']['displayName']
                 
-                results.append({
-                    "name": player['displayName'],
-                    "team": team,
-                    "id": player['id']
-                })
+            results.append({
+                "name": name,
+                "team": team,
+                "id": entity.get('id', 0)
+            })
+            
         return jsonify(results)
+
     except Exception as e:
-        print(e)
+        print(f"SEARCH ERROR: {e}")
         return jsonify([])
 
 @app.route('/api/track', methods=['POST'])
