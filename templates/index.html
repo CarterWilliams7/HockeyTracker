@@ -81,22 +81,52 @@
 
         searchInput.addEventListener('input', async (e) => {
             const query = e.target.value;
-            if (query.length < 3) { resultsBox.style.display = 'none'; return; }
-
-            const res = await fetch(`/api/search?q=${query}`);
-            const players = await res.json();
             
-            resultsBox.innerHTML = '';
-            players.forEach(p => {
-                const div = document.createElement('div');
-                div.className = 'search-item';
-                div.innerText = `${p.name} (${p.team})`;
-                div.onclick = () => selectPlayer(p);
-                resultsBox.appendChild(div);
-            });
-            resultsBox.style.display = 'block';
-        });
+            // Console log to verify typing works
+            console.log("Typing:", query);
 
+            if (query.length < 3) { 
+                resultsBox.style.display = 'none'; 
+                return; 
+            }
+
+            try {
+                // Console log to see the URL we are calling
+                console.log(`Fetching: /api/search?q=${query}`);
+                
+                const res = await fetch(`/api/search?q=${query}`);
+                
+                if (!res.ok) {
+                    console.error("Server Error:", res.status);
+                    return;
+                }
+
+                const players = await res.json();
+                console.log("Players found:", players); // See if data comes back
+                
+                resultsBox.innerHTML = '';
+                
+                if (players.length === 0) {
+                     const div = document.createElement('div');
+                     div.className = 'search-item';
+                     div.innerText = "No players found";
+                     resultsBox.appendChild(div);
+                } else {
+                    players.forEach(p => {
+                        const div = document.createElement('div');
+                        div.className = 'search-item';
+                        div.innerText = `${p.name} (${p.team})`;
+                        div.onclick = () => selectPlayer(p);
+                        resultsBox.appendChild(div);
+                    });
+                }
+                resultsBox.style.display = 'block';
+
+            } catch (error) {
+                console.error("Fetch failed:", error);
+            }
+        });
+        
         function selectPlayer(player) {
             selectedPlayer = player;
             document.getElementById('selectedPlayerName').innerText = `Selected: ${player.name}`;
